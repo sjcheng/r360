@@ -7,69 +7,55 @@ Created on Sat Mar 28 08:07:02 2015
 
 from featureforge.feature import input_schema, output_schema
 import math,numpy
+from numpy import linalg as la #用到别名
 
-'''
-user_id：用户id
-product_id：产品id
-date：不同日期，值越大代表离当前越近
-term：申请期限
-limit：申请金额
-result：0代表贷款申请没有被批准，1代表贷款申请获得批准
-'''
-
-class Order:    
-    oneorder = {}
-    def __init__(self, user_id, product_id, date, term, limit, result=None):
-        self.oneorder['user_id']=user_id
-        self.oneorder['product_id']=product_id
-        self.oneorder['date']=date
-        self.oneorder['term']=term
-        self.oneorder['limit']=limit
-        self.oneorder['result']=result
-    def getorder(self):
-        return self.oneorder
-
-
-class OrderFeature: 
+class Feature: 
     @staticmethod
-    def get_features(orders, featurename):
+    def get_features(data_list, featurename):
         tmp_array = []        
-        for order in orders:
-          tmp_array.append(float(order[featurename]))
+        for data in data_list:
+          tmp_array.append(float(data[featurename]))
         return tmp_array
-        
-    @staticmethod
-    def order_feature(order, feature_name):
-      return order[feature_name]
-
-def read_order_train_data(filename):
+    
+def read_csv_train_data(filename):
     f = open(filename, 'r')
-    orders = []
+    csv_schema_line = f.readline()
+    csv_schema = csv_schema_line.replace('\n','').split('\t')
+    data_list = []
     for line in f:
-      tmp = line.split('\t')
-      user_id = tmp[0]
-      product_id = tmp[1]
-      date = tmp[2]
-      term = tmp[3]
-      limit = tmp[4]
-      result = tmp[5]
-      oneorder = Order(user_id, product_id, date, term, limit, result).getorder()
-      orders.append(oneorder)
-    f.close()    
-    return orders
-        
+        data = {}
+        tmp = line.replace('\n','').split('\t')
+        for i in range(len(csv_schema)):
+            data[csv_schema[i]] = tmp[i]
+        data_list.append(data)
+    f.close
+    return data_list
+    
+# data1 as the main data, and mostly the key is "user_id"
+def merge_feature_vector(data1, data2, key):
+    print "no finish"
+    
 def cosine_distance(u, v):
     return numpy.dot(u, v) / (math.sqrt(numpy.dot(u, u)) * math.sqrt(numpy.dot(v, v)))
+
+def pearcorr(list1, list2):
+  return numpy.corrcoef(list1, list2)[0, 1]
+
+def ecludSim(inA,inB):
+    ##计算向量的第二范式,相当于直接计算了欧式距离
+    return 1.0/(1.0 + la.norm(inA-inB)) 
     
 if __name__ == '__main__':
-    train_file = 'order_train.txt'
-    orders = read_order_train_data(train_file)
-    Y = OrderFeature.get_features(orders, 'result')
-    print Y
-    feature_date = OrderFeature.get_features(orders, 'date')
-    print feature_date
-    feature_term = OrderFeature.get_features(orders, 'term')
-    feature_limit = OrderFeature.get_features(orders, 'limit')
-    print cosine_distance(Y, feature_date)
-    print cosine_distance(Y, feature_term)
-    print cosine_distance(Y, feature_limit)
+    order_train_file = 'order_train.txt'
+    orders = read_csv_train_data(order_train_file)
+
+    quality_train_file = 'quality_train_tmp.txt'  
+    qualitys = read_csv_train_data(quality_train_file)
+    
+    Y = Feature.get_features(orders, 'result')
+    feature_date = Feature.get_features(orders, 'date')
+    feature_term = Feature.get_features(orders, 'term')
+    feature_limit = Feature.get_features(orders, 'limit')
+    print "date: ", cosine_distance(Y, feature_date), pearcorr(Y, feature_date), ecludSim(Y, feature_date)
+    print "term: ", cosine_distance(Y, feature_term), pearcorr(Y, feature_term), ecludSim(Y, feature_term)
+    print "limit: ", cosine_distance(Y, feature_limit), pearcorr(Y, feature_limit), ecludSim(Y, feature_term)

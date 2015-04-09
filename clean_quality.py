@@ -5,11 +5,17 @@ Created on Sat April 6 08:07:02 2015
 @author: sjcheng
 """
 
-from featureforge.feature import input_schema, output_schema
-import math,numpy
-from numpy import linalg as la #用到别名
+#from featureforge.feature import input_schema, output_schema
+#import math,numpy
+#from numpy import linalg as la #用到别名
 from sklearn import tree
 from sklearn.feature_extraction import DictVectorizer
+from sklearn.externals.six import StringIO  
+#import pydot 
+import time
+
+ISOTIMEFORMAT='%Y-%m-%d %X'
+FILENAMEFORMAT='%Y%m%d%H%M'
 
 class Feature: 
     @staticmethod
@@ -35,7 +41,7 @@ def read_csv_train_data(filename):
             else: 
                 data.append(tmp[i])
         data_list.append(data)
-    f.close
+    f.close()
     return csv_schema, data_list
     
 def read_csv_train_data_by_schema(filename, schema):
@@ -86,6 +92,7 @@ def generate_feature_vector(data_schema, data_list, schema):
 # data1 as the main data, and mostly the key is "user_id"
 def merge_feature_vector(data1_schema, data1, data2_schema, data2, keys):
     result = []
+    join_flag = []
     data2Itor = {}
 
     schema = []
@@ -93,14 +100,16 @@ def merge_feature_vector(data1_schema, data1, data2_schema, data2, keys):
     
     for data in data2:
         data2Itor[generate_partition_key(data2_schema, data, keys)] = data
+        
     for data in data1:
         key = generate_partition_key(data1_schema, data, keys)
         if ( key not in data2Itor ) :
             #print "cannot find ", key," in data2 "
+            join_flag.append(0)
             continue
-        result        
         result.append( data + data2Itor[key] )
-    return schema, result
+        join_flag.append(1)
+    return schema, result, join_flag
     
 def generate_feature_vector_by_schema(data_dict_list, keep_schema):
     result = []
@@ -141,7 +150,7 @@ def partiton_csv_train_data(filename, partition_fields):
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
 def closeFiles( filePointer ):
     for k,v in filePointer.items():
-        v.close
+        v.close()
 
 def generate_partition_key(data_schema, data, partition_fields):
     key = ""
@@ -165,26 +174,29 @@ def count_pass_rate(data_list, indexOfResult):
             count = count + 1
     return count/(total_num+1.0)
     
+def get_current_time():
+    return time.strftime( ISOTIMEFORMAT, time.localtime() )
+    
 if __name__ == '__main__':
 
     # for patition quality data 
     # quality_train_file = 'quality_train.txt'    
     # partition_result = partiton_csv_train_data(quality_train_file, ["product_type","city_id","bank_id"])
-    
+    print get_current_time(), " start ..."
     # for partition 
     order_train_file = 'order_train.txt'
     order_schema, orders = read_csv_train_data(order_train_file)
-    print "Finish load ", order_train_file
-    print "Total order number: ", len(orders), " Order pass rate: ", count_pass_rate(orders, order_schema.index("result"))
+    print get_current_time(), "Finish load ", order_train_file
+    print get_current_time(), "Total order number: ", len(orders), " Order pass rate: ", count_pass_rate(orders, order_schema.index("result"))
     
     product_train_file = 'product_train.txt'
     product_schema, products = read_csv_train_data(product_train_file)
-    print "Finish load ", product_train_file
+    print get_current_time(), "Finish load ", product_train_file
     
     #first merge product with order, expend product_id to with product 
-    after_merge_schema, merged_order_with_product =  merge_feature_vector(order_schema, orders, product_schema, products, ["product_id"])
-    print "Finish merge order with product information."
-    print "Total order merged with product number: ", len(merged_order_with_product), " Order pass rate: ", count_pass_rate(merged_order_with_product, after_merge_schema.index("result"))    
+    after_merge_schema, merged_order_with_product, join_tmp =  merge_feature_vector(order_schema, orders, product_schema, products, ["product_id"])
+    print get_current_time(), "Finish merge order with product information."
+    print get_current_time(), "Total order merged with product number: ", len(merged_order_with_product), " Order pass rate: ", count_pass_rate(merged_order_with_product, after_merge_schema.index("result"))    
     #print "Sample order with product: ", merged_order_with_product[0]
     
     #merge order with quality, need know which quality information is related with the order
@@ -193,52 +205,88 @@ if __name__ == '__main__':
     quality_partition_filename = "quality_train.txt"
     #quality_partition_filename = "quality_partition_by_bct/quality_product_type-2_city_id-a87ff679a2f3e71d9181a67b7542122c_bank_id-cfcd208495d565ef66e7dff9f98764da"    
     quality_schema, qualitys = read_csv_train_data_by_schema(quality_partition_filename, ["user_id","city_id","bank_id","guarantee_type", "apply_from", "reapply_count"])
-    print "Finish load quality file ", quality_partition_filename, " total number: ", len(qualitys)
+    print get_current_time(), "Finish load quality file ", quality_partition_filename, " total number: ", len(qualitys)
     #print "Sample quality : ", qualitys[0]
 
-    after_merge_schema3, merged_order_with_product_with_quality = merge_feature_vector(after_merge_schema, merged_order_with_product, quality_schema, qualitys, ["user_id","city_id","bank_id"]) #,"city_id", "product_type", , "guarantee_type"
-    print "merged_order_with_product_with_quality count: ", len(merged_order_with_product_with_quality)
-    print "the rate of result = 1: ", count_pass_rate(merged_order_with_product_with_quality, after_merge_schema3.index("result"))
+    after_merge_schema3, merged_order_with_product_with_quality, join_tmp = merge_feature_vector(after_merge_schema, merged_order_with_product, quality_schema, qualitys, ["user_id","city_id","bank_id"]) #,"city_id", "product_type", , "guarantee_type"
+    print get_current_time(), "merged_order_with_product_with_quality count: ", len(merged_order_with_product_with_quality)
+    print get_current_time(), "the rate of result = 1: ", count_pass_rate(merged_order_with_product_with_quality, after_merge_schema3.index("result"))
 
     #Load test data   
     order_test_file = "order_test_no_label.txt"
     order_test_schema, orders_test = read_csv_train_data(order_test_file)
-    print "Total order test number: ", len(orders_test)
-    after_merge_schema, orders_test =  merge_feature_vector(order_test_schema, orders_test, product_schema, products, ["product_id"])
-    print "After merge with product, Total order test number: ", len(orders_test)    
-    print orders_test[0]
-    print after_merge_schema
-    print quality_schema
-    print qualitys[0]
-    order_test_after_merge_schema, orders_test = merge_feature_vector(after_merge_schema, orders_test, quality_schema, qualitys, ["user_id","city_id","bank_id"]) #,"city_id", "product_type", , "guarantee_type"
-    print "After merge with product and quality, Total order test number: ", len(orders_test)
+    print get_current_time(), "Total order test number: ", len(orders_test)
+    after_merge_schema, orders_test, join_tmp =  merge_feature_vector(order_test_schema, orders_test, product_schema, products, ["product_id"])
+    print get_current_time(), "After merge with product, Total order test number: ", len(orders_test)    
+   
+    order_test_after_merge_schema, orders_test, join_flag = merge_feature_vector(after_merge_schema, orders_test, quality_schema, qualitys, ["user_id","city_id","bank_id"]) #,"city_id", "product_type", , "guarantee_type"
+    print get_current_time(), "After merge with product and quality, Total order test number: ", len(orders_test), ", join flag length: ", len(join_flag)
   
     Y = Feature.get_features(merged_order_with_product_with_quality, after_merge_schema3.index('result'))
   
     #remove user_id, if the user id doesn't exist in train set, seems will have problem
-    tree_train_feature_schema = [ "city_id", "bank_id", "product_type", "guarantee_type", "apply_from", "reapply_count" ]
+    tree_train_feature_schema = [ "date", "term", "limit", "city_id", "bank_id", "product_type", "guarantee_type", "apply_from", "reapply_count" ]
     X_train = generate_feature_vector( after_merge_schema3, merged_order_with_product_with_quality, tree_train_feature_schema )  
     X_test = generate_feature_vector( order_test_after_merge_schema, orders_test, tree_train_feature_schema )  
   
-    #X_train = X_train[:1000]
-    #Y = Y[:1000]
+    #clean unused memory
+    orders = []
+    products = []
+    qualitys = []
+    orders_test = []
+    merged_order_with_product_with_quality = []
+    merged_order_with_product = []
+  
+    '''
+    X_train = X_train[:1000]
+    Y = Y[:1000]
+    X_test = X_test[:1000]
+    join_flag=join_flag[:1000]
+    '''
     
+    X_combine = X_train + X_test
     #print "X: ", X
     #print "Y: ", Y
     
     vec = DictVectorizer()
-    #X = vec.fit_transform([item[0] for item in featuresets]).toarray()
-    X = vec.fit_transform([item for item in X_train]).toarray()
-    print "finish transform X train"
-
-  
-    X_test = vec.fit_transform([item for item in X_test]).toarray()
-    print "finish transform X test"
     
+    X_combine = vec.fit_transform([item for item in X_combine]).toarray()
+    print get_current_time(), "finish transform X combine"
+    #print "train feature names: ", vec.get_feature_names()
+    X_train = X_combine[:len(X_train)]
+    X_test = X_combine[len(X_train):]
+        
     clf = tree.DecisionTreeClassifier()
-    clf = clf.fit(X, Y)
+    clf = clf.fit(X_train, Y)
+    print get_current_time(), "finish fit"
     
-    print "predict test: ", clf.predict(X_test)    
+    Y_predict = clf.predict(X_test)
+    print get_current_time(), "predict finish"
+
+    print get_current_time(), "join_flag number: ", len(join_flag)
+    print get_current_time(), "predict test: ", len(Y_predict)
+    
+    predict_result_file = "predict_"+ str(time.strftime( FILENAMEFORMAT, time.localtime() ) )
+    f = open(predict_result_file+".txt", 'w')
+    index = 0
+    for i in join_flag:
+        if i == 0:
+            print >> f, '0'
+        else:
+            print >> f, str(int(Y_predict[index]))
+            index = index + 1
+            if index % 2000 == 0:
+                f.flush()
+    f.flush()
+    f.close()
+    
+    print "importance:", clf.feature_importances_
+
+    dot_data = StringIO.StringIO() 
+    tree.export_graphviz(clf, out_file=dot_data) 
+#    graph = pydot.graph_from_dot_data(dot_data.getvalue()) 
+#    graph.write_pdf( predict_result_file + ".pdf" )
+        
 '''    
     quality_train_file = 'partition_data/quality_application_type-9_product_type-2_city_id-a87ff679a2f3e71d9181a67b7542122c_bank_id-cfcd208495d565ef66e7dff9f98764da'
     quality_useful_schema = ["user_id","reapply_count","qid145","apply_from","spam_score","mobile_verify","quality"]
